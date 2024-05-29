@@ -13,9 +13,9 @@ torch.manual_seed(0)
 MHBAMixerV2config = MHBAMixerV2Config()
 
 checkpoint_callback = ModelCheckpoint(monitor="val_loss", 
-                                    filename='mixer-best-{epoch:03d}-{val_acc:.3f}',
+                                    filename='mixer-best-{epoch:03d}-{val_loss:.3f}',
                                     save_top_k=1,
-                                    mode='max',
+                                    mode='min',
                                     save_last=True
                                     )
 trainer = L.Trainer(**MHBAMixerV2config.trainer, callbacks=[checkpoint_callback])

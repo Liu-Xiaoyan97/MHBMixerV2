@@ -18,12 +18,14 @@ class MHBAMixerV2Config(PretrainedConfig):
                 eos_token_id: int=2,
                 pad_token_id: int=2,
                 batch_size: int=64,
-                num_workers: int=16,
+                num_workers: int=1,
                 lr: float=6e-4,
                 weight_decy: float=0.1,
                 log_every_n_steps: int=10,
+                val_check_interval: float=0.25,
+                check_val_every_n_epoch: int=1,
                 accelerator: str="auto",
-                devices: int=1,
+                devices: int=4,
                 max_epochs: int=10,
                 **kwargs
     ):
@@ -44,7 +46,9 @@ class MHBAMixerV2Config(PretrainedConfig):
             "log_every_n_steps": log_every_n_steps,
             "accelerator": accelerator,
             "devices": devices,
-            "max_epochs": max_epochs
+            "max_epochs": max_epochs,
+            "val_check_interval": val_check_interval,
+            "check_val_every_n_epoch": check_val_every_n_epoch
         }
 
         super().__init__(

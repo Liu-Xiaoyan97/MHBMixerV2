@@ -51,7 +51,7 @@ class MHBAMixerV2Module(LightningModule):
         output = self.forward(batch)
         target = self.token_shift(batch)
         loss = F.cross_entropy(output.view(-1, self.vocab_size), target.view(-1), ignore_index=self.tokenizer.pad_token_id, reduction='mean')
-        self.log("train_loss", loss.item(), prog_bar=True, on_step=True, on_epoch=True, batch_size=len(batch))
+        self.log("train_loss", loss.item(), prog_bar=True, on_step=True, on_epoch=True, batch_size=len(batch), sync_dist=True)
         return loss
     
     def _shared_eval_step(self, batch, batch_idx):
@@ -67,13 +67,13 @@ class MHBAMixerV2Module(LightningModule):
     def validation_step(self, batch, batch_idx):
         loss = self._shared_eval_step(batch, batch_idx)
         metrics = {'val_loss': loss.item()}
-        self.log_dict(metrics, batch_size=len(batch))
+        self.log_dict(metrics, batch_size=len(batch), sync_dist=True)
         return loss
     
     def test_step(self, batch, batch_idx):
         loss = self._shared_eval_step(batch, batch_idx)
         metrics = {'test_loss': loss.item()}
-        self.log_dict(metrics, batch_size=len(batch))
+        self.log_dict(metrics, batch_size=len(batch), sync_dist=True)
         return loss
     
     def configure_optimizers(self):
