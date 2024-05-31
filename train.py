@@ -25,12 +25,15 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.ckpt is not None:
         trainer = L.Trainer(**MHBAMixerV2config.trainer, callbacks=[checkpoint_callback], ckpt_path=args.ckpt)
-        dm = Text8DataModule(MHBAMixerV2Config.batch_size)
-        model = MHBAMixerV2Module(MHBAMixerV2config)
+    else:
+        trainer = L.Trainer(**MHBAMixerV2config.trainer, callbacks=[checkpoint_callback])
+    dm = Text8DataModule(MHBAMixerV2Config.batch_size)
+    model = MHBAMixerV2Module(MHBAMixerV2config)
     if args.onlytest:
         dm.setup("test")
         trainer.test(model, datamodule=dm)
     else:
+        dm.setup("fit")
         trainer.fit(model, datamodule=dm)
         
 
