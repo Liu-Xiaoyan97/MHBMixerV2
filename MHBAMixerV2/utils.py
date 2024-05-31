@@ -95,14 +95,14 @@ class Text8DataModule(LightningDataModule):
     
     # datasets need to be fixed
     def prepare_data(self) -> None:
-        load_dataset("afmck/text8-chunked1024")
+        load_dataset("/share/home/liuxiaoyan/afmck/text8-chunked1024")
     
     def setup(self, stage: str):
         if stage == "fit":
-            self.train_dataset = load_dataset("afmck/text8-chunked1024", split="train")
-            self.val_dataset = load_dataset("afmck/text8-chunked1024", split="validation")
+            self.train_dataset = load_dataset("/share/home/liuxiaoyan/afmck/text8-chunked1024", split="train")
+            self.val_dataset = load_dataset("/share/home/liuxiaoyan/afmck/text8-chunked1024", split="validation")
         if stage == "test":
-            self.test_dataset = load_dataset("afmck/text8-chunked1024", split="test")
+            self.test_dataset = load_dataset("/share/home/liuxiaoyan/afmck/text8-chunked1024", split="test")
     
     def train_dataloader(self) -> torch.Any:
         return DataLoader(self.train_dataset, batch_size=self.batch_size, num_workers=self.num_workers)

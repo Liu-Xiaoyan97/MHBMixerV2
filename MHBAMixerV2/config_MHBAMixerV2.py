@@ -7,7 +7,7 @@ class MHBAMixerV2Config(PretrainedConfig):
     model_type = "MHBAMixerV2_LightningLM"
 
     def __init__(self, 
-                tokenizer_name: str="meta-llama/Llama-2-7b-hf",
+                tokenizer_name: str="/share/home/liuxiaoyan/meta-llama/Llama-2-7b-hf",
                 vocab_size: int=32000,
                 n_layers: int=12,
                 embedding_dim: int=300,
