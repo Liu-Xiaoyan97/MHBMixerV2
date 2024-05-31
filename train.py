@@ -27,7 +27,7 @@ if __name__ == "__main__":
         trainer = L.Trainer(**MHBAMixerV2config.trainer, callbacks=[checkpoint_callback], ckpt_path=args.ckpt)
     else:
         trainer = L.Trainer(**MHBAMixerV2config.trainer, callbacks=[checkpoint_callback])
-    dm = Text8DataModule(MHBAMixerV2Config.batch_size)
+    dm = Text8DataModule(MHBAMixerV2config.batch_size)
     model = MHBAMixerV2Module(MHBAMixerV2config)
     if args.onlytest:
         dm.setup("test")
