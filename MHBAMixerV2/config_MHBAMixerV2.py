@@ -27,6 +27,9 @@ class MHBAMixerV2Config(PretrainedConfig):
                 accelerator: str="auto",
                 devices: int=4,
                 max_epochs: int=10,
+                activation: str="silu",
+                num_experts: int=10,
+                topk: int=2,
                 **kwargs
     ):
         self.tokenizer_name = tokenizer_name
@@ -38,6 +41,9 @@ class MHBAMixerV2Config(PretrainedConfig):
         self.drop_rate = drop_rate
         self.batch_size = batch_size
         self.num_workers = num_workers
+        self.activation = activation
+        self.num_experts = num_experts,
+        self.topk = topk
         self.optimizer = {
             "lr": lr,
             "weight_decay": weight_decy

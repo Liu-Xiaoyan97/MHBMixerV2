@@ -1,5 +1,41 @@
 import torch
 from torch import nn as nn
+from transformers.activations import ACT2FN
+
+
+class TokenMixingMoE(nn.Module):
+    def __init__(self, 
+                 hidden_dim: int, 
+                 internal_dim: int, 
+                 activation: str, 
+                 drop_rate: float, 
+                 num_experts: int, 
+                 k: int=2):
+        super(TokenMixingMoE, self).__init__()
+        self.k = k
+        self.expert_size = hidden_dim
+        self.experts = nn.ModuleList([
+            MHBAMixerV2TokenMixer(
+                hidden_dim=hidden_dim, 
+                internal_dim=internal_dim, 
+                activation=activation,
+                drop_rate=drop_rate) for _ in range(num_experts)
+            ])
+        self.gate = nn.Linear(hidden_dim, num_experts)
+    
+    def forward(self, x):
+        gate_outputs = self.gate(x)
+        topk_values, topk_indices = torch.topk(gate_outputs, self.k, dim=1)
+
+        expert_outputs = torch.zeros(x.size(0), self.expert_size).to(x.device)
+        for i in range(self.k):
+            expert_idx = topk_indices[:, i]
+            expert_weight = topk_values[:, i].unsqueeze(1)
+            expert_output = self.experts[expert_idx](x)
+            expert_outputs += expert_weight * expert_output
+        
+        return expert_outputs
+    
 
 class MHBAMixerV2MemoryMixer(nn.Module):
     def __init__(self, hidden_dim, *args, **kwargs) -> None:
@@ -11,20 +47,25 @@ class MHBAMixerV2MemoryMixer(nn.Module):
         current_memorys = (1-self.forget_gate)*current_cell + self.forget_gate*memorys
         return current_memorys
 
+
 class MHBAMixerV2TokenMixer(nn.Module):
     def __init__(self, 
         hidden_dim: torch.Tensor, 
         internal_dim: torch.Tensor, 
+        activation: str,
         drop_rate: float,
         *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
+        activate = ACT2FN(activation)
         self.token_mixer = nn.Sequential(
             nn.LayerNorm(hidden_dim),
             nn.Dropout(drop_rate),
             nn.Linear(hidden_dim, internal_dim, bias=False),
+            activate(),
             nn.LayerNorm(internal_dim),
             nn.Dropout(drop_rate),
-            nn.Linear(internal_dim, hidden_dim)
+            nn.Linear(internal_dim, hidden_dim),
+            activate(),
         )
     
     def forward(self, input_: torch.Tensor):
@@ -45,7 +86,10 @@ class MHBAMixerV2Block(nn.Module):
     def __init__(self,
         hidden_dim: int,  
         n_heads: int, 
+        activation: str,
         drop_rate: float=0.5, 
+        num_experts: int=10,
+        topk: int=2,
         *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         # assert hidden_dim%n_heads, "hidden_dim must be divisible by n_heads!"
@@ -55,7 +99,13 @@ class MHBAMixerV2Block(nn.Module):
         self.values = nn.Linear(self.head_dim, self.head_dim, bias=False)
         self.n_heads = n_heads
         
-        self.token_mixer = MHBAMixerV2TokenMixer(hidden_dim=self.head_dim, internal_dim=self.head_dim * 2, drop_rate=drop_rate)
+        self.tokenMixingMoE = TokenMixingMoE(hidden_dim=self.head_dim, 
+                                             internal_dim=self.head_dim * 2, 
+                                             activation=activation, 
+                                             drop_rate=drop_rate, 
+                                             num_experts=num_experts, 
+                                             k=topk)
+    
         self.memory_mixer = MHBAMixerV2MemoryMixer(hidden_dim=self.head_dim)
     
     def forward(self, queries: torch.Tensor, keys: torch.Tensor, values: torch.Tensor, memorys: torch.Tensor):
@@ -70,7 +120,7 @@ class MHBAMixerV2Block(nn.Module):
 
         current_memorys = self.memory_mixer.forward(keys_, values_, memorys)
         cell_values = torch.mul(queries_, current_memorys)
-        token_mixing = self.token_mixer.forward(cell_values).transpose(1, 2)
+        token_mixing = self.tokenMixingMoE.forward(cell_values).transpose(1, 2)
         
         token_mixing = token_mixing.reshape(bsz, -1, self.n_heads*self.head_dim)
 
@@ -85,7 +135,10 @@ class MHBAMixerV2(nn.Module):
         hidden_dim: int,
         n_heads: int, 
         padding_idx: int,
+        activation: str,
         drop_rate: float=0.5, 
+        num_experts: int=10,
+        topk: int=2,
         *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self.embedding = nn.Embedding(vocab_size, embedding_dim, padding_idx)
@@ -93,7 +146,13 @@ class MHBAMixerV2(nn.Module):
         self.hidden_dim = hidden_dim
         self.memorys = nn.Parameter(torch.randn(hidden_dim//n_heads))
         self.MHBAMixerV2Blocks = nn.ModuleList(
-            MHBAMixerV2Block(hidden_dim=hidden_dim, n_heads=n_heads, drop_rate=drop_rate) for i in range(n_layers)
+            MHBAMixerV2Block(
+                hidden_dim=hidden_dim, 
+                n_heads=n_heads, 
+                activation=activation, 
+                drop_rate=drop_rate,
+                num_experts=num_experts,
+                topk=topk) for i in range(n_layers)
         )
         self.llm_head = nn.Linear(hidden_dim, vocab_size, bias=False)
     

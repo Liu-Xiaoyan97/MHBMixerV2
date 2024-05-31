@@ -31,7 +31,9 @@ class MHBAMixerV2Module(LightningModule):
             hidden_dim=config.hidden_dim if hasattr(config, "hidden_dim") else 512, 
             n_heads=config.n_heads if hasattr(config, "n_heads") else 512,
             padding_idx=self.tokenizer.pad_token_id,
-            drop_rate=config.drop_rate if hasattr(config, "drop_rate") else 0.02
+            drop_rate=config.drop_rate if hasattr(config, "drop_rate") else 0.02,
+            num_experts=config.num_experts if hasattr(config, "num_experts") else 10,
+            topk=config.topk if hasattr(config, "topk") else 2,
         )
         self.batch_size = config.batch_size if hasattr(config, "batch_size") else 64,
         self.optimizerconfig = config.optimizer if hasattr(config, "optimizer") else {"lr": 6e-4, "weight_decay": 0.01}
