@@ -56,7 +56,7 @@ class MHBAMixerV2TokenMixer(nn.Module):
         drop_rate: float,
         *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        activate = ACT2FN(activation)
+        activate = ACT2FN[activation]
         self.token_mixer = nn.Sequential(
             nn.LayerNorm(hidden_dim),
             nn.Dropout(drop_rate),
