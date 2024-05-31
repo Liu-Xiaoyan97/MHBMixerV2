@@ -56,21 +56,18 @@ class MHBAMixerV2TokenMixer(nn.Module):
         drop_rate: float,
         *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
-        activate = ACT2FN[activation]
-        self.token_mixer = nn.Sequential(
-            nn.LayerNorm(hidden_dim),
-            nn.Dropout(drop_rate),
-            nn.Linear(hidden_dim, internal_dim, bias=False),
-            activate(),
-            nn.LayerNorm(internal_dim),
-            nn.Dropout(drop_rate),
-            nn.Linear(internal_dim, hidden_dim),
-            activate(),
-        )
+        self.activate = ACT2FN[activation]
+        self.ln1 = nn.LayerNorm(hidden_dim)
+        self.drop_out = nn.Dropout(drop_rate)
+        self.linear1 = nn.Linear(hidden_dim, internal_dim, bias=False)
+        self.ln2 = nn.LayerNorm(internal_dim)
+        self.linear2 = nn.Linear(internal_dim, hidden_dim)
+        
     
     def forward(self, input_: torch.Tensor):
         flatten_input_ = torch.flatten(input_, start_dim=0, end_dim=-2)
-        token_mixing = self.token_mixer(flatten_input_)
+        token_mixing = self.linear1(self.activate(self.drop_out(self.ln1(flatten_input_))))
+        token_mixing = self.linear2(self.activate(self.drop_out(self.ln2(token_mixing))))
         token_reconstruct = token_mixing.reshape(input_.size())
         return token_reconstruct
 
