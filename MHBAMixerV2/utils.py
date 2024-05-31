@@ -32,6 +32,7 @@ class MHBAMixerV2Module(LightningModule):
             n_heads=config.n_heads if hasattr(config, "n_heads") else 512,
             padding_idx=self.tokenizer.pad_token_id,
             drop_rate=config.drop_rate if hasattr(config, "drop_rate") else 0.02,
+            activation=config.activation if hasattr(config, "activation") else "silu",
             num_experts=config.num_experts if hasattr(config, "num_experts") else 10,
             topk=config.topk if hasattr(config, "topk") else 2,
         )

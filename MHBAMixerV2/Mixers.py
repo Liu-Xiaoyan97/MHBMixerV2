@@ -151,7 +151,7 @@ class MHBAMixerV2(nn.Module):
                 n_heads=n_heads, 
                 activation=activation, 
                 drop_rate=drop_rate,
-                num_experts=num_experts,
+                num_experts=num_experts[0],
                 topk=topk) for i in range(n_layers)
         )
         self.llm_head = nn.Linear(hidden_dim, vocab_size, bias=False)
