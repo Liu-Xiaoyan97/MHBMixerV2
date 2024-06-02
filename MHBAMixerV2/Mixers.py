@@ -29,7 +29,7 @@ class TokenMixingMoE(nn.Module):
         x_flat = x.view(-1, head_dim)
         gate_outputs = self.gate(x_flat)
         topk_scores, topk_indices = torch.topk(gate_outputs, self.k, dim=-1)
-        topk_gates = F.one_hot(topk_indices, num_classes=self.n_experts).float()
+        topk_gates = F.one_hot(topk_indices, num_classes=self.num_experts).float()
         topk_gates = topk_gates * topk_scores.unsqueeze(-1) 
         topk_gates = topk_gates / topk_gates.sum(dim=-2, keepdim=True)
         expert_outputs = torch.stack([expert(x_flat) for expert in self.experts], dim=1)
