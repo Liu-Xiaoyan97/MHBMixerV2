@@ -1,6 +1,7 @@
 import torch
 from torch import nn as nn
 from transformers.activations import ACT2FN
+import torch.nn.functional as F
 
 
 class TokenMixingMoE(nn.Module):
@@ -24,17 +25,18 @@ class TokenMixingMoE(nn.Module):
         self.gate = nn.Linear(hidden_dim, num_experts)
     
     def forward(self, x):
-        gate_outputs = self.gate(x)
-        topk_values, topk_indices = torch.topk(gate_outputs, self.k, dim=1)
-
-        expert_outputs = torch.zeros(x.size(0), self.expert_size).to(x.device)
-        for i in range(self.k):
-            expert_idx = topk_indices[:, i]
-            expert_weight = topk_values[:, i].unsqueeze(1)
-            expert_output = self.experts[expert_idx](x)
-            expert_outputs += expert_weight * expert_output
-        
-        return expert_outputs
+        bsz, n_heads, seq_len, head_dim = x.shape
+        x_flat = x.view(-1, head_dim)
+        gate_outputs = self.gate(x_flat)
+        topk_scores, topk_indices = torch.topk(gate_outputs, self.k, dim=-1)
+        topk_gates = F.one_hot(topk_indices, num_classes=self.n_experts).float()
+        topk_gates = topk_gates * topk_scores.unsqueeze(-1) 
+        topk_gates = topk_gates / topk_gates.sum(dim=-2, keepdim=True)
+        expert_outputs = torch.stack([expert(x_flat) for expert in self.experts], dim=1)
+        topk_expert_outputs = torch.matmul(topk_gates, expert_outputs)
+        combined_outputs = topk_expert_outputs.sum(dim=-2)
+        output = combined_outputs.view(bsz, n_heads, seq_len, -1)
+        return output
     
 
 class MHBAMixerV2MemoryMixer(nn.Module):
