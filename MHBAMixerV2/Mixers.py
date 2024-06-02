@@ -14,6 +14,7 @@ class TokenMixingMoE(nn.Module):
                  k: int=2):
         super(TokenMixingMoE, self).__init__()
         self.k = k
+        self.num_experts = num_experts
         self.expert_size = hidden_dim
         self.experts = nn.ModuleList([
             MHBAMixerV2TokenMixer(
