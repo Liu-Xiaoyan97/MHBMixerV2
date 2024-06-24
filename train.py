@@ -8,7 +8,9 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 import argparse
 torch.set_float32_matmul_precision('medium')
 torch.manual_seed(0)
+import os 
 
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="funeturing from checkpoint")
@@ -23,12 +25,11 @@ if __name__ == "__main__":
                                         save_last=True
                                         )
     args = parser.parse_args()
-    if args.ckpt is not None:
-        trainer = L.Trainer(**MHBAMixerV2config.trainer, callbacks=[checkpoint_callback], ckpt_path=args.ckpt)
-    else:
-        trainer = L.Trainer(**MHBAMixerV2config.trainer, callbacks=[checkpoint_callback])
+    trainer = L.Trainer(**MHBAMixerV2config.trainer, callbacks=[checkpoint_callback])
     dm = Text8DataModule(MHBAMixerV2config.batch_size)
     model = MHBAMixerV2Module(MHBAMixerV2config)
+    if args.ckpt is not None:
+        model = MHBAMixerV2Module.load_from_checkpoint(args.ckpt)
     if args.onlytest:
         dm.setup("test")
         trainer.test(model, datamodule=dm)

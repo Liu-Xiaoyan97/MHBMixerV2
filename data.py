@@ -1,24 +1,7 @@
-from pytorch_lightning.utilities.types import TRAIN_DATALOADERS
-import torch
-from torch import nn as nn
-from MHBAMixerV2.Mixers import MHBAMixerV2
-from transformers import LlamaTokenizer as Tokenizer
-from lightning import LightningModule, LightningDataModule
-import os
-import torch.nn.functional as F
-# from torchdata.datapipes.iter import FileOpener
-torch.utils.data.datapipes.utils.common.DILL_AVAILABLE = torch.utils._import_utils.dill_available()
-from zipfile import ZipFile
-from torch.utils.data import DataLoader, Dataset
-from datasets import load_dataset, load_from_disk
-
-hf_access_token = "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"
-os.environ["HF_ACCESS_TOKEN"] = hf_access_token
-
-tokenizer = Tokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", token=hf_access_token, padding_side="right")
-tokenizer.pad_token = tokenizer.eos_token
-
-seq = ["aaaa", "hhh", "hello how are you"]
-outputs = tokenizer.batch_encode_plus(seq, padding="longest", return_tensors="pt")['input_ids']
-print(outputs)
-print(tokenizer.decode)
+import requests
+import pickle
+field = {"field": 'mily was poor his father james faraday was a blacksmith and he had to educate himself at fourteen he became apprenticed to bookbinder and seller george riebau and during his seven year apprenticeship read many books developing an interest in science and specifically electricity at the age of twenty faraday attended lectures by the eminent scientist sir humphry davy president of the royal society and john tatum founder of the city philosophical society after faraday sent davy a sample of notes taken during the lectures davy said he would keep faraday in mind but should stick to his current job of book binding after davy damaged his eyesight in an accident with nitrogen trichloride he employed faraday as a secretary when john payne of the royal society was fired davy recommended faraday for the job of laboratory assistant faraday eagerly left his bookbinding job as his employer henry de la roche was hot tempered in a class based society faraday was not considered a gentleman when davy went on a long tour to the'}
+response = requests.post('http://127.0.0.1:5005/embedding', data=field).content
+# print(response)
+response = pickle.loads(response)
+print(response)
