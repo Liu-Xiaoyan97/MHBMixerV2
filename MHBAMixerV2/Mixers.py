@@ -121,9 +121,9 @@ class MHBAMixerV2Block(nn.Module):
         
         self.tokenMixingKAN = KAN([self.head_dim, self.head_dim *2, self.head_dim])
         # self.tokenMixingKAN = KANLinear(self.head_dim, self.head_dim)
-    
+
         self.memory_mixer = MHBAMixerV2MemoryMixer(hidden_dim=self.head_dim)
-        self.gate = nn.Parameter(torch.randn(hidden_dim//n_heads))
+        self.update_gate = nn.Parameter(torch.randn(hidden_dim//n_heads))
     
     def forward(self, queries: torch.Tensor, keys: torch.Tensor, values: torch.Tensor, memorys: torch.Tensor):
         bsz = queries.shape[0]
@@ -135,13 +135,17 @@ class MHBAMixerV2Block(nn.Module):
         keys_ = self.keys(keys_perpare)
         values_ = self.values(values_perpare)
 
-        current_memorys = self.memory_mixer.forward(keys_, values_, memorys)
-        current_memorys = torch.mul(current_memorys, self.gate).cumsum(dim=-1)
-        cell_values = queries_+current_memorys
-        # token_mixing = self.tokenMixingMLP.forward(cell_values).transpose(1, 2)    
-        token_mixing = self.tokenMixingKAN.forward(cell_values).transpose(1, 2)
+        current_memorys = self.memory_mixer.forward(keys_, values_, memorys).cumsum(dim=-1)
+        # Last Modified 2024/6/25 2:12
+        # add residual
+        cell_values = F.tanh(torch.mul(queries_+current_memorys, self.update_gate)+queries_perpare)
         
-        token_mixing = token_mixing.reshape(bsz, -1, self.n_heads*self.head_dim)
+        # token_mixing = self.tokenMixingMLP.forward(cell_values).transpose(1, 2) 
+
+        # add residual   
+        token_mixing = F.tanh(self.tokenMixingKAN.forward(cell_values)+cell_values)
+
+        token_mixing = token_mixing.transpose(1, 2).reshape(bsz, -1, self.n_heads*self.head_dim)
 
         return token_mixing, current_memorys
 
@@ -149,20 +153,15 @@ class MHBAMixerV2Block(nn.Module):
 
 class MHBAMixerV2(nn.Module):
     def __init__(self, 
-        vocab_size: int,
-        n_layers: int,
-        embedding_dim: int,  
+        n_layers: int, 
         hidden_dim: int,
         n_heads: int, 
-        padding_idx: int,
         activation: str,
         drop_rate: float=0.5, 
         num_experts: int=10,
         topk: int=2,
         *args, **kwargs) -> None:
         super(MHBAMixerV2, self).__init__(*args, **kwargs)
-        self.postNorm = nn.LayerNorm(embedding_dim)
-        self.bottleneck = nn.Linear(embedding_dim, hidden_dim)
         self.hidden_dim = hidden_dim
         self.memorys = nn.Parameter(torch.randn(hidden_dim//n_heads))
         self.MHBAMixerV2Blocks = nn.ModuleList(
@@ -174,18 +173,16 @@ class MHBAMixerV2(nn.Module):
                 num_experts=num_experts[0],
                 topk=topk) for i in range(n_layers)
         )
-        self.llm_head = nn.Linear(hidden_dim, vocab_size, bias=False)
         
 
     def forward(self,
             inputs_: torch.Tensor):
-        token_seq_embedding = self.postNorm(inputs_)
-        bottleneck = self.bottleneck(token_seq_embedding)
-        token_mixing = fourier_transform(bottleneck, self.hidden_dim)
+        token_mixing = fourier_transform(inputs_, self.hidden_dim)
         memory = self.memorys
         for layer in self.MHBAMixerV2Blocks:
             token_mixing, memory = layer(token_mixing, token_mixing, token_mixing, memory)
         token_mixing = reverse_fourier_transform(token_mixing, self.hidden_dim)
-        outputs = self.llm_head(token_mixing)
-        return outputs
+        return token_mixing
+    
+    
         

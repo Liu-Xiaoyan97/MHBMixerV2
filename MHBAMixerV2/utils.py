@@ -2,7 +2,7 @@ from pytorch_lightning.utilities.types import TRAIN_DATALOADERS
 import torch
 from torch import nn as nn
 from MHBAMixerV2.Mixers import MHBAMixerV2
-from transformers import LlamaTokenizer as Tokenizer
+from transformers import AutoTokenizer
 from lightning import LightningModule, LightningDataModule
 import os
 from transformers.configuration_utils import PretrainedConfig
@@ -20,7 +20,6 @@ hf_access_token = "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"
 os.environ["HF_ACCESS_TOKEN"] = hf_access_token
 
 
-
 class MHBAMixerV2Module(LightningModule):
     def __init__(self, config: PretrainedConfig, *args, **kwargs):
         super().__init__()
@@ -28,36 +27,41 @@ class MHBAMixerV2Module(LightningModule):
         # self.tokenizer = Tokenizer.from_pretrained(config.tokenizer_name if hasattr(config, "tokenizer_name") else "meta-llama/Llama-2-7b-hf", token=hf_access_token, padding_side="right")
         self.vocab_size=config.vocab_size if hasattr(config, "vocab_size") else 32000
         self.MHBAMixers = MHBAMixerV2(
-            vocab_size=self.vocab_size,
             n_layers=config.n_layers if hasattr(config, "n_layers") else 12,
-            embedding_dim=config.embedding_dim if hasattr(config, "embedding_dim") else 300,
             hidden_dim=config.hidden_dim if hasattr(config, "hidden_dim") else 512, 
             n_heads=config.n_heads if hasattr(config, "n_heads") else 512,
-            padding_idx=102,
             drop_rate=config.drop_rate if hasattr(config, "drop_rate") else 0.02,
             activation=config.activation if hasattr(config, "activation") else "silu",
             num_experts=config.num_experts if hasattr(config, "num_experts") else 10,
             topk=config.topk if hasattr(config, "topk") else 2,
         )
-        self.batch_size = config.batch_size if hasattr(config, "batch_size") else 16,
+        self.batch_size = config.batch_size if hasattr(config, "batch_size") else 64,
         self.optimizerconfig = config.optimizer if hasattr(config, "optimizer") else {"lr": 6e-4, "weight_decay": 0.01}
         self.token_shift = nn.ConstantPad1d((-1, 1), 102)
+        self.embeddings = nn.Embedding(config.vocab_size, config.embedding_dim)
+        self.bottleneck = nn.Linear(config.embedding_dim, config.hidden_dim)
+        self.postNorm = nn.LayerNorm(config.embedding_dim)
+        self.llmhead = nn.Linear(config.hidden_dim, config.vocab_size)
 
     
     def forward(self, inputs):
-        return self.MHBAMixers(inputs)
+        inputs = self.postNorm(self.embeddings(inputs))
+        inputs = self.postNorm(self.bottleneck(inputs))
+        outputs = self.MHBAMixers(inputs)
+        llm_outputs = self.llmhead(outputs)
+        return llm_outputs
     
     def training_step(self, batch, batch_idx):
-        embeddings, token_ids = batch["embeddings"], batch["input_ids"]
-        output = self.forward(embeddings)
+        token_ids = batch["input_ids"]
+        output = self.forward(token_ids)
         target = self.token_shift(token_ids)
         loss = F.cross_entropy(output.view(-1, self.vocab_size), target.view(-1), ignore_index=102, reduction='mean')
         self.log("train_loss", loss.item(), prog_bar=True, on_step=True, on_epoch=True, batch_size=len(batch), sync_dist=True)
         return loss
     
     def _shared_eval_step(self, batch, batch_idx):
-        embeddings, token_ids = batch["embeddings"], batch["input_ids"]
-        output = self.forward(embeddings)
+        token_ids = batch["input_ids"]
+        output = self.forward(token_ids)
         target = self.token_shift(token_ids)
         loss = F.cross_entropy(output.view(-1, 30522), target.view(-1), ignore_index=102, reduction='mean')
         logits = torch.argmax(output, dim=-1)
@@ -78,12 +82,12 @@ class MHBAMixerV2Module(LightningModule):
         return loss
     
     def configure_optimizers(self):
-        return torch.optim.AdamW(self.MHBAMixers.parameters(), **self.optimizerconfig)
+        return torch.optim.AdamW(self.parameters(), **self.optimizerconfig)
 
 
 # Guidence of LightningDataModule    
 # https://lightning.ai/docs/pytorch/stable/data/datamodule.html#why-do-i-need-a-datamodule
-class Text8DataModule(LightningDataModule):
+class MHBAMixerV2DataModule(LightningDataModule):
     def __init__(self, 
                  config: PretrainedConfig
                  ) -> None:
@@ -91,7 +95,6 @@ class Text8DataModule(LightningDataModule):
         self.batch_size = config.batch_size if hasattr(config, "batch_size") else 32
         self.num_workers = config.num_workers if hasattr(config, "num_workers ") else 31
     
-    # datasets need to be fixed
     def prepare_data(self) -> None:
         load_dataset("/share/home/liuxiaoyan/afmck/text8-chunked1024")
         load_dataset("/share/home/liuxiaoyan/liuyanchen1015/VALUE_wikitext103_been_done")
@@ -128,35 +131,45 @@ def tokenizeAndembedding(field):
     return response
 
 
-class Text8Dataset(Dataset):
+class MHBAMixerV2Dataset(Dataset):
+    def __init__(self) -> None:
+        super().__init__()
+        self.data = None
+        self.tokenizer = AutoTokenizer.from_pretrained('/share/home/liuxiaoyan/BAAI/bge-small-en-v1.5')
+
+    def processing(self, field):
+        pass
+
+    def __getitem__(self, index):
+        return self.processing(self.data[index])
+
+    def __len__(self):
+        return len(self.data)
+
+
+class Text8Dataset(MHBAMixerV2Dataset):
     def __init__(self, mode) -> None:
         super().__init__()
         self.data = load_dataset("/share/home/liuxiaoyan/afmck/text8-chunked1024", split=mode)
-
-    def __getitem__(self, index):
-        return tokenizeAndembedding(self.data[index]['text'])
     
-    def __len__(self):
-        return len(self.data)
+    def processing(self, field):
+        field = self.tokenizer(text=field['text'], padding="max_length", max_length=512, truncation=True, return_tensors="pt")
+        return field
     
-class Wikitext103Dataset(Dataset):
+class Wikitext103Dataset(MHBAMixerV2Dataset):
     def __init__(self, mode) -> None:
         super().__init__()
         self.data = load_dataset("/share/home/liuxiaoyan/liuyanchen1015/VALUE_wikitext103_been_done", split=mode)
 
-    def __getitem__(self, index):
-        return tokenizeAndembedding(self.data[index]['sentence'])
+    def processing(self, field):
+        field = self.tokenizer(text=field['sentence'], padding="max_length", max_length=512, truncation=True, return_tensors="pt")
+        return field
     
-    def __len__(self):
-        return len(self.data)
-    
-class BookcorpusDataset(Dataset):
+class BookcorpusDataset(MHBAMixerV2Dataset):
     def __init__(self, mode) -> None:
         super().__init__()
         self.data = load_dataset("/share/home/liuxiaoyan/bookcorpus", split=mode, trust_remote_code=True)
     
-    def __getitem__(self, index):
-        return tokenizeAndembedding(self.data[index]['text'])
-    
-    def __len__(self):
-        return len(self.data)
+    def processing(self, field):
+        field = self.tokenizer(text=field['text'], padding="max_length", max_length=512, truncation=True, return_tensors="pt")
+        return field
